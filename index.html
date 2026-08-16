@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full bg-[#F8FAFC]">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Daily Routine Tracker</title>
+
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#F8FAFC">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="RoutineApp">
+
+  <!-- Manifest Data URI for Zero-Config PWA -->
+  <link rel="manifest" href='data:application/manifest+json,{"name":"Daily Routine Tracker","short_name":"Routine","start_url":".","display":"standalone","background_color":"#F8FAFC","theme_color":"#F8FAFC"}'>
+
+  <!-- Google Fonts: Inter & TH Sarabun New -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=TH+Sarabun+New:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Alpine.js for Reactive State Management -->
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Tailwind Custom Configuration adhering to Design System Tokens -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bgLight: '#F8FAFC',
+            cardWhite: '#FFFFFF',
+            textDark: '#0F172A',
+            accentRed: '#EF4444',
+            accentMorning: '#FFB703',
+            accentAfternoon: '#FB8500',
+            accentEvening: '#1E3A8A',
+            blockMorningA: '#F4A261',
+            blockMorningB: '#E9C46A',
+            blockAfternoonA: '#E76F51',
+            blockAfternoonB: '#F08080',
+            blockEveningA: '#2A9D8F',
+            blockEveningB: '#48CAE4',
+          },
+          fontFamily: {
+            sans: ['Inter', 'TH Sarabun New', 'sans-serif'],
+            thai: ['TH Sarabun New', 'Inter', 'sans-serif'],
+          },
+          boxShadow: {
+            'elevation-1': '0 2px 8px -2px rgba(15, 23, 42, 0.08), 0 1px 4px -1px rgba(15, 23, 42, 0.04)',
+            'elevation-2': '0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- AMOLED 120Hz Hardware Acceleration & Dynamic Layout CSS -->
+  <style>
+    /* Force GPU acceleration & ultra-smooth transitions */
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .smooth-gpu {
+      will-change: transform, opacity;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+    }
+    /* Scrollbar Hiding for clean mobile feel */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+
+<body class="h-full w-full bg-bgLight text-textDark font-sans antialiased overflow-hidden selection:bg-accentAfternoon selection:text-white"
+      x-data="routineApp()" 
+      x-init="initApp()">
+
+  <!-- Screen Layout Frame (Targeted for FHD+ 20:9 Aspect Ratio Mobile Screens) -->
+  <div class="mx-auto h-full max-w-md w-full flex flex-col justify-between relative bg-bgLight overflow-hidden shadow-2xl">
+    
+    <!-- HEADER SECTION -->
+    <header class="pt-6 px-6 pb-2 bg-bgLight border-b border-slate-100 flex-none z-10">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-textDark">Today</h1>
+          <p class="text-xs text-slate-500 font-medium" x-text="currentFormattedDate"></p>
+        </div>
+        <!-- Push Notification Toggle Request -->
+        <button @click="requestNotificationPermission()" class="p-2 rounded-full bg-slate-100 active:scale-95 transition-transform duration-150 smooth-gpu">
+          <i data-lucide="bell" class="w-5 h-5 text-textDark"></i>
+        </button>
+      </div>
+
+      <!-- Weekly Day Picker Component -->
+      <div class="flex justify-between items-center gap-1 mb-4">
+        <template x-for="(day, idx) in weekDays" :key="idx">
+          <div @click="selectedDayIdx = idx"
+               :class="selectedDayIdx === idx ? 'bg-textDark text-white shadow-elevation-1 scale-105' : 'bg-cardWhite text-slate-600 border border-slate-100'"
+               class="flex flex-col items-center justify-center w-11 h-14 rounded-xl cursor-pointer transition-all duration-200 active:scale-95 smooth-gpu">
+            <span class="text-[10px] font-medium uppercase opacity-70" x-text="day.name"></span>
+            <span class="text-sm font-bold" x-text="day.date"></span>
+          </div>
+        </template>
+      </div>
+
+      <!-- Daily Progress Percentage Bar -->
+      <div class="mb-2">
+        <div class="flex justify-between items-center text-xs font-semibold mb-1">
+          <span class="text-slate-500">Daily Progress</span>
+          <span class="text-textDark" x-text="progressPercentage + '%'"></span>
+        </div>
+        <div class="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+          <div class="bg-gradient-to-r from-accentMorning via-accentAfternoon to-blockEveningA h-full transition-all duration-500 ease-out"
+               :style="'width: ' + progressPercentage + '%'"></div>
+        </div>
+      </div>
+
+      <!-- Time Period Filter Chips -->
+      <div class="flex space-x-2 pt-2 pb-1 overflow-x-auto no-scrollbar">
+        <button @click="activeFilter = 'all'"
+                :class="activeFilter === 'all' ? 'bg-textDark text-white' : 'bg-cardWhite text-slate-600 border border-slate-200'"
+                class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 active:scale-95">All</button>
+        <button @click="activeFilter = 'Morning'"
+                :class="activeFilter === 'Morning' ? 'bg-accentMorning text-slate-900' : 'bg-cardWhite text-slate-600 border border-slate-200'"
+                class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 active:scale-95">Morning</button>
+        <button @click="activeFilter = 'Afternoon'"
+                :class="activeFilter === 'Afternoon' ? 'bg-accentAfternoon text-white' : 'bg-cardWhite text-slate-600 border border-slate-200'"
+                class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 active:scale-95">Afternoon</button>
+        <button @click="activeFilter = 'Evening'"
+                :class="activeFilter === 'Evening' ? 'bg-accentEvening text-white' : 'bg-cardWhite text-slate-600 border border-slate-200'"
+                class="px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 active:scale-95">Evening</button>
+      </div>
+    </header>
+
+    <!-- MAIN TIMELINE GRAPH SECTION -->
+    <main class="flex-1 overflow-y-auto px-6 py-4 no-scrollbar relative">
+      <div class="relative pl-6 border-l-2 border-slate-200 space-y-4">
+        
+        <template x-for="(activity, index) in filteredActivities" :key="activity.id">
+          <!-- Timeline Card Component -->
+          <div class="relative group">
+            <!-- Timeline Node Indicator -->
+            <div class="absolute -left-[31px] top-4 w-[10px] h-[10px] rounded-full border-2 border-bgLight transition-colors duration-300"
+                 :class="activity.completed ? 'bg-emerald-500 ring-2 ring-emerald-200' : 'bg-slate-400'"></div>
+
+            <!-- Activity Block Card -->
+            <div :style="'background-color: ' + (activity.completed ? '#F1F5F9' : activity.color)"
+                 :class="activity.completed ? 'opacity-70 border-dashed border border-slate-300' : 'shadow-elevation-1'"
+                 class="p-4 rounded-[12px] flex items-center justify-between transition-all duration-300 active:scale-[0.98] smooth-gpu">
+              
+              <div class="flex items-center space-x-3">
+                <!-- Category Icon Container -->
+                <div class="w-10 h-10 rounded-full flex items-center justify-center bg-white/40 backdrop-blur-sm text-textDark">
+                  <i :data-lucide="getPeriodIcon(activity.period)" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="font-bold text-base text-textDark leading-tight font-thai" 
+                      :class="{'line-through text-slate-500': activity.completed}" 
+                      x-text="activity.title"></h3>
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <span class="text-xs font-medium opacity-80 text-textDark" x-text="activity.startTime + ' - ' + activity.endTime"></span>
+                    <span x-show="activity.reminder" class="w-1.5 h-1.5 rounded-full bg-accentRed"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Interactive Checkbox Toggle -->
+              <button @click="toggleComplete(activity.id)" 
+                      :class="activity.completed ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white/80 border-slate-300 text-transparent'"
+                      class="w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 active:scale-90 smooth-gpu">
+                <i data-lucide="check" class="w-4 h-4 stroke-[3]"></i>
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Empty State View -->
+        <template x-if="filteredActivities.length === 0">
+          <div class="py-12 text-center">
+            <p class="text-slate-400 text-sm font-medium">No routine set for this period.</p>
+            <p class="text-slate-400 text-xs mt-1">Tap + to add a custom activity.</p>
+          </div>
+        </template>
+
+      </div>
+    </main>
+
+    <!-- FLOATING ACTION BUTTON (FAB) -->
+    <div class="absolute bottom-20 right-6 z-20">
+      <button @click="openModal = true" 
+              class="w-14 h-14 bg-accentAfternoon text-white rounded-full flex items-center justify-center shadow-elevation-2 active:scale-90 transition-transform duration-150 smooth-gpu">
+        <i data-lucide="plus" class="w-7 h-7"></i>
+      </button>
+    </div>
+
+    <!-- BOTTOM NAVIGATION BAR -->
+    <nav class="h-16 bg-cardWhite border-t border-slate-100 px-6 flex items-center justify-around flex-none z-10">
+      <button class="flex flex-col items-center text-textDark">
+        <i data-lucide="calendar" class="w-6 h-6"></i>
+        <span class="text-[10px] font-semibold mt-0.5">Today</span>
+      </button>
+      <button class="flex flex-col items-center text-slate-400 hover:text-textDark transition-colors">
+        <i data-lucide="bar-chart-2" class="w-6 h-6"></i>
+        <span class="text-[10px] font-semibold mt-0.5">Stats</span>
+      </button>
+      <button class="flex flex-col items-center text-slate-400 hover:text-textDark transition-colors">
+        <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+        <span class="text-[10px] font-semibold mt-0.5">Habits</span>
+      </button>
+      <button class="flex flex-col items-center text-slate-400 hover:text-textDark transition-colors">
+        <i data-lucide="user" class="w-6 h-6"></i>
+        <span class="text-[10px] font-semibold mt-0.5">Profile</span>
+      </button>
+    </nav>
+
+    <!-- ADD ACTIVITY BOTTOM SHEET / MODAL -->
+    <div x-show="openModal" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-30 flex items-end justify-center"
+         style="display: none;">
+      
+      <div @click.away="openModal = false"
+           x-show="openModal"
+           x-transition:enter="transition ease-out duration-300 transform"
+           x-transition:enter-start="translate-y-full"
+           x-transition:enter-end="translate-y-0"
+           x-transition:leave="transition ease-in duration-200 transform"
+           x-transition:leave-start="translate-y-0"
+           x-transition:leave-end="translate-y-full"
+           class="w-full bg-cardWhite rounded-t-[24px] p-6 shadow-elevation-2 smooth-gpu max-h-[90vh] overflow-y-auto">
+        
+        <div class="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6"></div>
+        <h2 class="text-xl font-bold text-textDark mb-4">Add Custom Activity</h2>
+
+        <form @submit.prevent="addActivity()">
+          <!-- Activity Name Input -->
+          <div class="mb-4">
+            <label class="block text-xs font-semibold text-slate-500 mb-1">ACTIVITY NAME</label>
+            <input type="text" x-model="newActivity.title" required placeholder="e.g. ออกกำลังกาย, อ่านหนังสือ" 
+                   class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-textDark font-thai">
+          </div>
+
+          <!-- Time Range Selectors -->
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">START TIME</label>
+              <input type="time" x-model="newActivity.startTime" @change="autoAssignPeriod()" required 
+                     class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-textDark">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-500 mb-1">END TIME</label>
+              <input type="time" x-model="newActivity.endTime" required 
+                     class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-textDark">
+            </div>
+          </div>
+
+          <!-- Time Period Selection -->
+          <div class="mb-4">
+            <label class="block text-xs font-semibold text-slate-500 mb-2">TIME PERIOD (AUTO-ASSIGNED)</label>
+            <div class="grid grid-cols-3 gap-2">
+              <button type="button" @click="newActivity.period = 'Morning'"
+                      :class="newActivity.period === 'Morning' ? 'bg-accentMorning text-slate-900 border-transparent' : 'bg-slate-50 text-slate-600 border-slate-200'"
+                      class="py-2 text-xs font-bold rounded-xl border transition-colors">Morning</button>
+              <button type="button" @click="newActivity.period = 'Afternoon'"
+                      :class="newActivity.period === 'Afternoon' ? 'bg-accentAfternoon text-white border-transparent' : 'bg-slate-50 text-slate-600 border-slate-200'"
+                      class="py-2 text-xs font-bold rounded-xl border transition-colors">Afternoon</button>
+              <button type="button" @click="newActivity.period = 'Evening'"
+                      :class="newActivity.period === 'Evening' ? 'bg-accentEvening text-white border-transparent' : 'bg-slate-50 text-slate-600 border-slate-200'"
+                      class="py-2 text-xs font-bold rounded-xl border transition-colors">Evening</button>
+            </div>
+          </div>
+
+          <!-- Push Notification Toggle -->
+          <div class="flex items-center justify-between py-2 mb-6">
+            <span class="text-sm font-semibold text-textDark">Set Reminder Notification</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" x-model="newActivity.reminder" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accentAfternoon"></div>
+            </label>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex gap-3">
+            <button type="button" @click="openModal = false" class="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl text-sm active:scale-95 transition-transform">Cancel</button>
+            <button type="submit" class="flex-1 py-3 bg-accentAfternoon text-white font-bold rounded-xl text-sm shadow-elevation-1 active:scale-95 transition-transform">Save Routine</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- STATE MANAGEMENT & LOGIC SCRIPT -->
+  <script>
+    function routineApp() {
+      return {
+        openModal: false,
+        selectedDayIdx: 2,
+        activeFilter: 'all',
+        weekDays: [
+          { name: 'Mon', date: '20' },
+          { name: 'Tue', date: '21' },
+          { name: 'Wed', date: '22' },
+          { name: 'Thu', date: '23' },
+          { name: 'Fri', date: '24' },
+          { name: 'Sat', date: '25' },
+          { name: 'Sun', date: '26' }
+        ],
+        // Design Token Alternating Colors mapping
+        alternatingColors: {
+          Morning: ['#F4A261', '#E9C46A'],
+          Afternoon: ['#E76F51', '#F08080'],
+          Evening: ['#2A9D8F', '#48CAE4']
+        },
+        newActivity: {
+          title: '',
+          startTime: '08:00',
+          endTime: '09:00',
+          period: 'Morning',
+          reminder: true
+        },
+        activities: [],
+
+        initApp() {
+          // Load stored activities or set defaults
+          const saved = localStorage.getItem('pwa_routines');
+          if (saved) {
+            this.activities = JSON.parse(saved);
+          } else {
+            this.activities = [
+              { id: 1, title: 'Morning Run', startTime: '06:00', endTime: '07:00', period: 'Morning', color: '#F4A261', completed: true, reminder: false },
+              { id: 2, title: 'Project Work', startTime: '14:00', endTime: '15:30', period: 'Afternoon', color: '#E76F51', completed: false, reminder: true },
+              { id: 3, title: 'Evening Reading', startTime: '20:00', endTime: '20:45', period: 'Evening', color: '#2A9D8F', completed: false, reminder: true }
+            ];
+          }
+          this.$nextTick(() => lucide.createIcons());
+        },
+
+        get currentFormattedDate() {
+          const options = { weekday: 'short', month: 'short', day: 'numeric' };
+          return new Date().toLocaleDateString('en-US', options);
+        },
+
+        get progressPercentage() {
+          if (this.activities.length === 0) return 0;
+          const completedCount = this.activities.filter(a => a.completed).length;
+          return Math.round((completedCount / this.activities.length) * 100);
+        },
+
+        get filteredActivities() {
+          if (this.activeFilter === 'all') return this.activities;
+          return this.activities.filter(a => a.period === this.activeFilter);
+        },
+
+        autoAssignPeriod() {
+          const hour = parseInt(this.newActivity.startTime.split(':')[0], 10);
+          if (hour >= 6 && hour < 12) {
+            this.newActivity.period = 'Morning';
+          } else if (hour >= 12 && hour < 18) {
+            this.newActivity.period = 'Afternoon';
+          } else {
+            this.newActivity.period = 'Evening';
+          }
+        },
+
+        getPeriodIcon(period) {
+          switch(period) {
+            case 'Morning': return 'sun';
+            case 'Afternoon': return 'sunset';
+            case 'Evening': return 'moon';
+            default: return 'clock';
+          }
+        },
+
+        toggleComplete(id) {
+          const item = this.activities.find(a => a.id === id);
+          if (item) {
+            item.completed = !item.completed;
+            this.saveData();
+          }
+        },
+
+        addActivity() {
+          const periodList = this.activities.filter(a => a.period === this.newActivity.period);
+          const colors = this.alternatingColors[this.newActivity.period];
+          const assignedColor = colors[periodList.length % colors.length];
+
+          const newObj = {
+            id: Date.now(),
+            title: this.newActivity.title,
+            startTime: this.newActivity.startTime,
+            endTime: this.newActivity.endTime,
+            period: this.newActivity.period,
+            color: assignedColor,
+            completed: false,
+            reminder: this.newActivity.reminder
+          };
+
+          this.activities.push(newObj);
+          // Sort timeline chronologically
+          this.activities.sort((a, b) => a.startTime.localeCompare(b.startTime));
+          
+          this.saveData();
+          this.openModal = false;
+
+          // Reset Form
+          this.newActivity = { title: '', startTime: '08:00', endTime: '09:00', period: 'Morning', reminder: true };
+          this.$nextTick(() => lucide.createIcons());
+        },
+
+        saveData() {
+          localStorage.setItem('pwa_routines', JSON.stringify(this.activities));
+        },
+
+        requestNotificationPermission() {
+          if ('Notification' in window) {
+            Notification.requestPermission().then(permission => {
+              if (permission === 'granted') {
+                new Notification("Daily Routine Tracker", {
+                  body: "Notifications enabled! We'll remind you on time.",
+                  icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FB8500"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z"/></svg>'
+                });
+              }
+            });
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>
